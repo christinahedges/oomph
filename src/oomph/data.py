@@ -125,6 +125,11 @@ class CoRoTMultiPhotometry(object):
             Number of points to search for the red edge of the green band pass
         plot: bool
             Whether or not to plot the data
+
+        Returns
+        -------
+        fig: matplotlib.pyplot.figure
+            If plot is `True`, will return a figure, else will return None
         """
         spec = _bb(self.teff*u.K) * _bandpass
         def func(p1=507, p2=585, show=False):
@@ -154,7 +159,6 @@ class CoRoTMultiPhotometry(object):
                 fig, ax = plt.subplots(1, 2, figsize=(12, 4))
                 im = ax[0].pcolormesh(p1s, p2s, np.log10(chi).T, cmap='viridis')
                 cbar = plt.colorbar(im, ax=ax[0])
-                ax[0].legend(frameon=True)
                 ax[0].set_xlabel('Point 1 [nm]')
                 ax[0].set_ylabel('Point 2 [nm]')
                 cbar.set_label('log$_{10}$ Chi')
@@ -196,6 +200,7 @@ class CoRoTMultiPhotometry(object):
         if plot:
             with plt.style.context('seaborn-white'):
                 ax[0].scatter(p1, p2, c='r', label=f'{p1.astype(int)}, {p2.astype(int)}')
+                ax[0].legend(frameon=True)
 
                 bmask = (_wav.to(u.nm).value > 300) & (_wav.to(u.nm).value < p1)
                 gmask = (_wav.to(u.nm).value > p1) & (_wav.to(u.nm).value < p2)
@@ -254,7 +259,7 @@ class CoRoTMultiPhotometry(object):
             return teff, fig
         return teff
 
-    def fit_flare(self, cadence_mask, teff=None, bin=0.0025, draws=500, tune=100, chains=2, cores=2):
+    def fit_flare(self, cadence_mask, teff=None, r_star=0.8*u.solRad, bin=0.0025, draws=500, tune=100, chains=2, cores=2):
         """
         Fits the flare energy in a given region of the CoRoT data
 
@@ -265,6 +270,8 @@ class CoRoTMultiPhotometry(object):
         teff : float
             The assumed temperature of the photosphere. If none, will use the
             effective temperature in `self`.
+        r_star: float * astropy.unit.solRad
+            Stellar radius, used to set the estimated flare energy in Joules.
         bin : float
             The time resolution to bin to
         draws : int
@@ -292,6 +299,9 @@ class CoRoTMultiPhotometry(object):
         bmask = (wav.to(u.nm).value > 300) & (wav.to(u.nm).value < self.p1)
         gmask = (wav.to(u.nm).value > self.p1) & (wav.to(u.nm).value < self.p2)
         rmask = (wav.to(u.nm).value > self.p2) & (wav.to(u.nm).value < 11000)
+
+        unit = u.joule * u.day * u.nm/(u.s * u.m**3)
+        const = ((np.pi * (r_star)**2) * unit).to(u.joule).value
 
         if teff is None:
             teff = self.teff
@@ -328,7 +338,7 @@ class CoRoTMultiPhotometry(object):
         tmask = t < 0
 
         with pm.Model() as model:
-            teff_flare = pm.Uniform('teff_flare', lower=4000, upper=20000, testval=10000)
+            teff_flare = pm.Uniform('teff_flare', lower=4000, upper=30000, testval=10000)
             amp = pm.Uniform('amp', lower=0, upper=1, testval=0.1)
             te = pm.Uniform('te', lower=0, upper=0.03, testval=0.01)
             tg = pm.Uniform('tg', lower=0, upper=0.03, testval=0.01)
@@ -348,7 +358,7 @@ class CoRoTMultiPhotometry(object):
         b_corr = map_soln['b_corr']
 
         with pm.Model() as model:
-            teff_flare = pm.Uniform('teff_flare', lower=4000, upper=20000, testval=map_soln['teff_flare'])
+            teff_flare = pm.Uniform('teff_flare', lower=4000, upper=30000, testval=map_soln['teff_flare'])
             amp = pm.Uniform('amp', lower=0, upper=1, testval=map_soln['amp'])
             te = pm.Uniform('te', lower=0, upper=0.03, testval=map_soln['te'])
             tg = pm.Uniform('tg', lower=0, upper=0.03, testval=map_soln['tg'])
@@ -363,7 +373,7 @@ class CoRoTMultiPhotometry(object):
 
             L = tt.sum(np.diff(t) * (flare_time_series[:-1] + flare_time_series[1:])/2)
             flare_spec = _bb_tt(teff_flare)
-            E = pm.Deterministic('energy', tt.sum(np.diff(wav.value)  * (flare_spec[:-1] + flare_spec[1:])/2))
+            E = pm.Deterministic('energy', (tt.sum(np.diff(wav.value)  * (flare_spec[:-1] + flare_spec[1:])/2)) * const)
 
             trace = pm.sample(
                 draws=draws,
@@ -376,6 +386,8 @@ class CoRoTMultiPhotometry(object):
 
 
         samples = pm.trace_to_dataframe(trace)
+
+
         fig1 = corner.corner(samples)
 
         fig2, ax = plt.subplots(1, 2, facecolor='w', figsize=(10, 5))

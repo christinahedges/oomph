@@ -15,10 +15,13 @@ lightkurve = ">=2.0b4"
 tqdm = "^4.56.0"
 exoplanet = "^0.4.3"
 corner = "^2.1.0"
+ipywidgets = "^7.6.3"
 
 [tool.poetry.dev-dependencies]
 jupyterlab = "^3.0.5"
 pytest = "^6.2.1"
+jedi = "0.17.2"
+pyreadline = "^2.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
