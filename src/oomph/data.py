@@ -40,6 +40,19 @@ def _flare_time_series(t, te=0.01, tg=0.01):
 
 class CoRoTMultiPhotometry(object):
     def __init__(self, id, teff, hdu):
+        """ Class to handle CoRoT multi band photometry
+
+        Use `from_archive` to download a source
+
+        Parameters
+        ----------
+        id : int
+            CoRoT ID
+        teff : float
+            Effective temperature of target (e.g. use Gaia)
+        hdu : astropy.io.fits
+            Fits object with data
+        """
         self.id = id
         self.teff = teff
         self.hdu = hdu
@@ -49,6 +62,15 @@ class CoRoTMultiPhotometry(object):
 
     @staticmethod
     def from_archive(id, teff):
+        """Downloads a CoRoT source from the archive.
+
+        Parameters
+        ----------
+        id : int
+            CoRoT ID
+        teff : float
+            Effective temperature of target (e.g. use Gaia)
+        """
         def _get_url(id):
             df = pd.read_csv(PACKAGEDIR + '/data/catalog.csv')
             loc = np.where(df.CoRoT == id)[0]
@@ -63,7 +85,6 @@ class CoRoTMultiPhotometry(object):
     def __repr__(self):
         return f'CoRoT {self.id}'
 
-
     def _open(self):
         t = self.hdu[1].data['DATETT']
         b = self.hdu[1].data['BLUEFLUX']
@@ -74,10 +95,10 @@ class CoRoTMultiPhotometry(object):
         ge = self.hdu[1].data['GREENFLUXDEV']
         re = self.hdu[1].data['REDFLUXDEV']
 
+        # Removes any significant outliers
         k = re/r > 0.5
         k |= be/b > 0.5
         k |= ge/g > 0.5
-
         k |= sigma_clip(np.ma.masked_array(np.gradient(w, t), k), sigma=5).mask
 
         k = ~k
@@ -89,7 +110,22 @@ class CoRoTMultiPhotometry(object):
         self.lc = self.rlc + self.glc + self.blc
 
 
-    def calibrate(self, plot=True, p1_lim=(495, 505), p2_lim=(550, 560), p1_num=200, p2_num=201):
+    def calibrate(self, p1_lim=(495, 505), p2_lim=(550, 560), p1_num=200, p2_num=201, plot=True):
+        """Calibrates the CoRoT multiband photometry, based on the input effective temperature value.
+
+        Parameters
+        ----------
+        p1_lim: tuple of ints
+            Limits to search for the blue edge of the green band bandpass
+        p2_lim: tuple of ints
+            Limits to search for the red edge of the green band bandpass
+        p1_num: int
+            Number of points to search for the blue edge of the green band pass
+        p2_num: int
+            Number of points to search for the red edge of the green band pass
+        plot: bool
+            Whether or not to plot the data
+        """
         spec = _bb(self.teff*u.K) * _bandpass
         def func(p1=507, p2=585, show=False):
             bmask = (_wav.to(u.nm).value > 300) & (_wav.to(u.nm).value < p1)
@@ -218,8 +254,37 @@ class CoRoTMultiPhotometry(object):
             return teff, fig
         return teff
 
-    def fit_flare(self, cadence_mask, teff=None, bin=0.005, draws=500, tune=100, chains=2, cores=2):
+    def fit_flare(self, cadence_mask, teff=None, bin=0.0025, draws=500, tune=100, chains=2, cores=2):
+        """
+        Fits the flare energy in a given region of the CoRoT data
 
+        Parameters
+        ----------
+        cadence_mask : np.array of booleans
+            Cadences to fit.
+        teff : float
+            The assumed temperature of the photosphere. If none, will use the
+            effective temperature in `self`.
+        bin : float
+            The time resolution to bin to
+        draws : int
+            Number of draws in pymc3 sampling
+        tune : int
+            Tune parameter pymc3 sampling
+        chains : int
+            Chains in pymc3 sampling
+        cores : int
+            Cores in pymc3 sampling
+
+        Returns
+        -------
+        fig1 : matplotlib.pyplot.figure
+            Figure containing the corner plot of fit parameters
+        fig2 : matplotlib.pyplot.figure
+            Figure containing the color light curves, and best fit flare function
+        samples : pandas.DataFrame
+            DataFrame containing the samples
+        """
         bandpass = pd.read_csv(PACKAGEDIR + '/data/bandpass.dat', header=None, delimiter=' ')
         wav = np.arange(300, 1100, 5)*u.nm
         bandpass = np.interp(wav.to(u.angstrom).value, np.asarray(bandpass[0]), np.asarray(bandpass[1]))

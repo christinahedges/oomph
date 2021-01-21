@@ -34,5 +34,5 @@ def test_fit_flare():
     c.p1 = 498
     c.p2 = 555
     c._build_masks()
-    cadence_mask = (c.lc.time.jd > 54294.05) & (c.lc.time.jd < 54295.5)
+    cadence_mask = (c.lc.time.jd > 54295.) & (c.lc.time.jd < 54295.5)
     c.fit_flare(cadence_mask)
