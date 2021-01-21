@@ -11,9 +11,14 @@ astropy = ">=4.1"
 matplotlib = ">=3.2"
 scikit-image = ">=0.17.2"
 pandas = ">=1.1.4"
+lightkurve = ">=2.0b4"
+tqdm = "^4.56.0"
+exoplanet = "^0.4.3"
+corner = "^2.1.0"
 
 [tool.poetry.dev-dependencies]
 jupyterlab = "^3.0.5"
+pytest = "^6.2.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
